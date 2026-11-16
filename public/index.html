@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hourbook</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+/* Layout: one calm working column; a ledger-green accent marks actions and live time. Figures in mono, tenths of an hour. */
+:root{
+  --bg:#f4f6f3; --surface:#ffffff; --sunk:#eef1ed; --ink:#18211d; --muted:#5d6a63; --line:#dce2dc;
+  --accent:#1d6b55; --accent-ink:#ffffff; --accent-soft:#e1efe9; --warn:#a8512b; --warn-soft:#f7e8e0; --good:#1d6b55;
+  --cost:#9aa8a0;
+  --f-ui:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101512; --surface:#171e1a; --sunk:#1c2420; --ink:#e4ebe6; --muted:#93a199; --line:#2a332e;
+  --accent:#53b897; --accent-ink:#06130e; --accent-soft:#1b2d26; --warn:#e08a63; --warn-soft:#33221a; --good:#53b897; --cost:#5f6d66; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101512; --surface:#171e1a; --sunk:#1c2420; --ink:#e4ebe6; --muted:#93a199; --line:#2a332e;
+  --accent:#53b897; --accent-ink:#06130e; --accent-soft:#1b2d26; --warn:#e08a63; --warn-soft:#33221a; --good:#53b897; --cost:#5f6d66; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+img{max-width:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+.wrap{max-width:1080px;margin:0 auto}
+h1,h2,h3{margin:0;text-wrap:balance}
+button,input,select,textarea{font:inherit;color:inherit}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-block:20px 12px}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto;min-width:0}
+.brand h1{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.brand .co{color:var(--muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.mode{font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:99px;background:var(--sunk);color:var(--muted)}
+.mode.shared{background:var(--accent-soft);color:var(--accent)}
+nav.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;margin-bottom:20px}
+nav.tabs button{background:none;border:0;padding:10px 14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav.tabs button:hover{color:var(--ink)}
+.banner{padding:10px 14px;border-radius:8px;background:var(--warn-soft);color:var(--ink);margin-bottom:16px;font-size:13px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.stack{display:flex;flex-direction:column;gap:16px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+input,select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;min-width:0}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.grow{flex:1 1 220px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:8px 14px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.small{padding:4px 9px;font-size:12px}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.ghost:hover{color:var(--ink);background:var(--sunk)}
+.btn.danger[data-armed]{background:var(--warn);border-color:var(--warn);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.muted{color:var(--muted)}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.section-h{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.section-h h2{font-size:16px;font-weight:700}
+.monthnav{display:flex;align-items:center;gap:6px}
+.monthnav strong{min-width:140px;text-align:center;font-weight:700}
+
+/* timer */
+.timer{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:14px 18px;border-radius:10px;background:var(--accent);color:var(--accent-ink)}
+.timer .clock{font-family:var(--f-num);font-size:28px;font-weight:600;letter-spacing:-.02em}
+.timer .what{flex:1 1 200px;min-width:0}
+.timer .what b{display:block}
+.timer .btn{background:var(--accent-ink);color:var(--accent);border-color:var(--accent-ink)}
+.timer .btn.ghost{background:none;color:var(--accent-ink);border-color:transparent;opacity:.85}
+.dot{width:9px;height:9px;border-radius:50%;background:currentColor;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){.dot{animation:none}}
+
+/* week strip */
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.day{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer}
+.day .d{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+.day .n{font-size:13px;font-weight:600}
+.day .h{font-family:var(--f-num);font-size:13px;margin-top:2px}
+.day .h.zero{color:var(--muted);opacity:.6}
+.day[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.day.today .n{color:var(--accent)}
+
+/* tables */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+td.num{white-space:nowrap}
+tfoot td{font-weight:700;border-top:1px solid var(--line);border-bottom:0}
+.note{color:var(--muted);font-size:13px;white-space:pre-wrap;word-break:break-word}
+.chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;padding:2px 8px;border-radius:99px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chip.ok{background:var(--accent-soft);color:var(--accent)}
+.chip.live{background:var(--warn-soft);color:var(--warn)}
+.empty{padding:28px 12px;text-align:center;color:var(--muted)}
+.edit-tbl input,.edit-tbl select{width:100%;padding:6px 8px}
+.edit-tbl td{padding:5px 6px;vertical-align:middle}
+.edit-tbl input.n{max-width:96px;text-align:right;font-family:var(--f-num)}
+
+/* invoice cards */
+.inv{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.inv-h{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;padding:14px 18px;align-items:center}
+.inv-h .t b{font-size:15px}
+.inv-figs{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.inv-figs span b{color:var(--ink);font-family:var(--f-num);font-weight:500}
+.inv-total{font-family:var(--f-num);font-size:20px;font-weight:600;text-align:right}
+.inv-actions{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 14px;align-items:center}
+.inv-body{border-top:1px solid var(--line);padding:6px 8px 10px}
+.inv-body h4{margin:12px 10px 2px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{padding:12px 14px;border-radius:9px;background:var(--surface);border:1px solid var(--line)}
+.stat .v{font-family:var(--f-num);font-size:18px;font-weight:600;margin-top:2px}
+
+/* log */
+.log-row{cursor:pointer}
+.log-row:hover td{background:var(--sunk)}
+.bar{height:6px;border-radius:3px;background:var(--accent);margin-top:5px}
+.bar.cost{background:var(--cost)}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.step{padding:14px;border:1px dashed var(--line);border-radius:9px}
+.step b{display:block;margin-bottom:4px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;max-width:calc(100% - 32px);z-index:20}
+.hint{font-size:12px;color:var(--muted)}
+body.staff .adm{display:none}
+.auth{max-width:380px;margin:12vh auto 0}
+.auth-err{color:var(--warn);font-weight:600;min-height:1em}
+.linkbox{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px;border-radius:8px;background:var(--accent-soft)}
+.linkbox code{font-family:var(--f-num);font-size:12px;word-break:break-all;flex:1 1 260px;min-width:0}
+@media (max-width:640px){
+  .week{gap:4px}.day{padding:6px 2px}.day .d{font-size:10px}
+  .inv-h{grid-template-columns:1fr}.inv-total{text-align:left}
+  .hide-sm{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top" id="app-header" hidden>
+    <div class="brand"><h1>Hourbook</h1><span class="co" id="co-name"></span></div>
+    <div class="who"><label for="me-select">Logging as</label><select id="me-select"></select></div>
+    <span class="who" id="me-name" hidden></span>
+    <button class="btn small ghost" data-act="logout" id="logout" hidden>Sign out</button>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist" hidden></nav>
+  <div id="banner"></div>
+
+  <!-- SIGN IN / SETUP -->
+  <section id="view-auth" hidden>
+    <div class="auth panel stack">
+      <div><h1 style="font-size:24px;font-weight:800">Hourbook</h1><div class="muted" id="auth-sub">Sign in to log your time.</div></div>
+      <form id="login-form" class="stack" autocomplete="on">
+        <div class="field"><label for="l-user">Username</label><input id="l-user" autocomplete="username" required></div>
+        <div class="field"><label for="l-pass">Password</label><input id="l-pass" type="password" autocomplete="current-password" required></div>
+        <div class="auth-err" id="l-err" role="alert"></div>
+        <button class="btn primary" type="submit">Sign in</button>
+        <div class="hint">Forgot your password? Ask your admin for a new setup link.</div>
+      </form>
+      <form id="setup-form" class="stack" hidden autocomplete="off">
+        <div class="field"><label for="s-user">Username</label><input id="s-user" autocomplete="username" readonly></div>
+        <div class="field"><label for="s-pass">New password</label><input id="s-pass" type="password" autocomplete="new-password" minlength="10" required></div>
+        <div class="field"><label for="s-pass2">Repeat password</label><input id="s-pass2" type="password" autocomplete="new-password" minlength="10" required></div>
+        <div class="hint">At least 10 characters. A short phrase is easier to remember than a jumble.</div>
+        <div class="auth-err" id="s-err" role="alert"></div>
+        <button class="btn primary" type="submit">Set password and sign in</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- TIME -->
+  <section id="view-time" class="stack" hidden>
+    <div id="timer-slot"></div>
+    <div class="panel stack">
+      <div class="section-h">
+        <h2 id="week-label">This week</h2>
+        <div class="monthnav">
+          <button class="btn small ghost" data-act="week" data-n="-7" aria-label="Previous week">◀</button>
+          <button class="btn small" data-act="today">Today</button>
+          <button class="btn small ghost" data-act="week" data-n="7" aria-label="Next week">▶</button>
+        </div>
+      </div>
+      <div class="week" id="week"></div>
+    </div>
+    <div class="panel stack">
+      <div class="section-h"><h2 id="day-label">Today</h2><span class="muted num" id="day-total"></span></div>
+      <form id="entry-form" class="row" autocomplete="off">
+        <div class="field grow"><label for="e-project">Project</label><select id="e-project" required></select></div>
+        <div class="field" style="flex:2 1 260px"><label for="e-note">What you worked on</label><input id="e-note" placeholder="e.g. Site visit and field notes"></div>
+        <div class="field" style="width:96px"><label for="e-hours">Hours</label><input id="e-hours" class="num" inputmode="decimal" placeholder="1.5"></div>
+        <button class="btn primary" type="submit" id="e-submit">Add hours</button>
+        <button class="btn" type="button" data-act="start-timer" id="e-timer">▶ Start timer</button>
+        <button class="btn ghost" type="button" data-act="cancel-edit" id="e-cancel" hidden>Cancel</button>
+      </form>
+      <div class="hint">Hours take decimals (1.5), h:mm (1:30) or minutes (45m). The timer rounds up to the next tenth of an hour.</div>
+      <div id="day-list"></div>
+    </div>
+  </section>
+
+  <!-- EXPENSES -->
+  <section id="view-expenses" class="stack" hidden>
+    <div class="section-h"><h2>Reimbursable expenses</h2><div class="monthnav" data-monthnav></div></div>
+    <form id="x-form" class="panel row" autocomplete="off">
+      <div class="field" style="width:150px"><label for="x-date">Date</label><input id="x-date" type="date" required></div>
+      <div class="field grow"><label for="x-project">Project</label><select id="x-project" required></select></div>
+      <div class="field" style="flex:2 1 220px"><label for="x-desc">Description</label><input id="x-desc" placeholder="e.g. Mileage, 84 mi round trip" required></div>
+      <div class="field" style="width:110px"><label for="x-amount">Cost $</label><input id="x-amount" class="num" inputmode="decimal" required></div>
+      <div class="field adm" style="width:90px"><label for="x-markup">Markup %</label><input id="x-markup" class="num" inputmode="decimal" placeholder="default"></div>
+      <div class="field"><label for="x-billable">Bill client</label><input id="x-billable" type="checkbox" checked></div>
+      <button class="btn primary" type="submit">Add expense</button>
+    </form>
+    <div class="panel" id="x-list"></div>
+  </section>
+
+  <!-- CONSULTANTS -->
+  <section id="view-consultants" class="stack" hidden>
+    <div class="section-h"><h2>Outside consultants</h2><div class="monthnav" data-monthnav></div></div>
+    <form id="c-form" class="panel row" autocomplete="off">
+      <div class="field" style="width:150px"><label for="c-date">Bill date</label><input id="c-date" type="date" required></div>
+      <div class="field grow"><label for="c-consultant">Consultant</label><select id="c-consultant" required></select></div>
+      <div class="field grow"><label for="c-project">Project</label><select id="c-project" required></select></div>
+      <div class="field" style="flex:2 1 200px"><label for="c-desc">Description</label><input id="c-desc" placeholder="e.g. Geotech report, inv #2231" required></div>
+      <div class="field" style="width:110px"><label for="c-amount">Cost $</label><input id="c-amount" class="num" inputmode="decimal" required></div>
+      <div class="field" style="width:90px"><label for="c-markup">Markup %</label><input id="c-markup" class="num" inputmode="decimal" placeholder="default"></div>
+      <button class="btn primary" type="submit">Add bill</button>
+    </form>
+    <div class="panel" id="c-list"></div>
+  </section>
+
+  <!-- INVOICES -->
+  <section id="view-invoices" class="stack" hidden>
+    <div class="section-h"><h2>Monthly invoices</h2><div class="monthnav" data-monthnav></div></div>
+    <div id="inv-summary"></div>
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <span class="hint" id="qbo-hint"></span>
+      <button class="btn primary" data-act="qbo">Export for QuickBooks (.csv)</button>
+    </div>
+    <div class="stack" id="inv-list"></div>
+  </section>
+
+  <!-- LOG -->
+  <section id="view-log" class="stack" hidden>
+    <div class="section-h"><h2>Monthly activity</h2><div class="legend"><span><i style="background:var(--accent)"></i>Billable</span><span><i style="background:var(--cost)"></i>Cost</span></div></div>
+    <div class="panel chart" id="log-chart"></div>
+    <div class="panel tbl-wrap" id="log-table"></div>
+  </section>
+
+  <!-- SETUP -->
+  <section id="view-setup" class="stack" hidden>
+    <div class="panel stack" id="set-people"></div>
+    <div class="panel stack" id="set-projects"></div>
+    <div class="panel stack" id="set-rates"></div>
+    <div class="panel stack" id="set-consultants"></div>
+    <div class="panel stack" id="set-users"></div>
+    <div class="panel stack" id="set-company"></div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ---------- helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const r2=n=>{n=+n||0;return Math.sign(n)*Math.round((Math.abs(n)+Number.EPSILON)*100)/100};
+const money=n=>{n=r2(n);return (n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})};
+const money0=n=>(n<0?'-':'')+'$'+Math.abs(Math.round(n)).toLocaleString('en-US');
+const fh=n=>(+n||0).toFixed(2);
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today=()=>iso(new Date());
+const pISO=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const monthOf=s=>s.slice(0,7);
+const addDays=(s,n)=>{const d=pISO(s);d.setDate(d.getDate()+n);return iso(d)};
+const addMonths=(m,n)=>{const d=new Date(+m.slice(0,4),+m.slice(5,7)-1+n,1);return `${d.getFullYear()}-${pad(d.getMonth()+1)}`};
+const monthLabel=m=>new Date(+m.slice(0,4),+m.slice(5,7)-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+const monthShort=m=>new Date(+m.slice(0,4),+m.slice(5,7)-1,1).toLocaleDateString('en-US',{month:'short'});
+const lastDay=m=>iso(new Date(+m.slice(0,4),+m.slice(5,7),0));
+const weekStart=s=>{const d=pISO(s);d.setDate(d.getDate()-((d.getDay()+6)%7));return iso(d)};
+const fmtDate=s=>pISO(s).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+const fmtDateLong=s=>pISO(s).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+const mdy=s=>{const[y,m,d]=s.split('-');return `${m}/${d}/${y}`};
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const num=v=>(v===''||v==null||isNaN(+v))?null:+v;
+function parseHours(s){s=String(s||'').trim().toLowerCase();if(!s)return NaN;let m;
+  s=s.replace(',','.');if((m=s.match(/^(\d+):([0-5]?\d)$/)))return +m[1]+ +m[2]/60;if(/:/.test(s))return NaN;
+  if((m=s.match(/^(\d+(?:\.\d+)?)\s*m(in)?s?$/)))return +m[1]/60;
+  if((m=s.match(/^(\d+(?:\.\d+)?)\s*h(?:\s*(\d+)\s*m)?$/)))return +m[1]+(+m[2]||0)/60;
+  return parseFloat(s)}
+const ls={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+let toastT;function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200)}
+
+/* ---------- server data layer (same shape the page already uses) ---------- */
+class ApiError extends Error{constructor(code,message){super(message);this.code=code}}
+async function api(url,opt={}){
+  const r=await fetch(url,{credentials:'same-origin',...opt,headers:{'Content-Type':'application/json','X-Hourbook':'1',...(opt.headers||{})}});
+  if(r.status===401&&!opt.noRedirect){location.href='/';throw new ApiError('unauth','Sign in required.')}
+  let body=null;if(r.status!==204){try{body=await r.json()}catch{}}
+  if(!r.ok)throw new ApiError(r.status===403?'not_granted':r.status===409?'locked':r.status===429?'rate':'error',(body&&body.error)||'Something went wrong.');
+  return body}
+function makeApiDB(){
+  const L=new Map();
+  async function refresh(url){const l=L.get(url);if(!l||l.loading)return;l.loading=true;try{const d=await api(url);l.last=d;l.fns.forEach(f=>f(d))}catch(e){l.errs.forEach(f=>f(e))}finally{l.loading=false}}
+  function listen(url,shape,next,err){let l=L.get(url);if(!l){l={fns:new Set(),errs:new Set(),last:undefined,loading:false};L.set(url,l)}
+    const f=d=>next(shape(d));l.fns.add(f);if(err)l.errs.add(err);if(l.last!==undefined)setTimeout(()=>f(l.last),0);else refresh(url);return()=>l.fns.delete(f)}
+  const refreshAll=()=>L.forEach((_,u)=>refresh(u));
+  setInterval(()=>{if(!document.hidden)refreshAll()},20000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAll()});
+  const qs=d=>({docs:d.map(r=>({id:r.id,exists:true,data:()=>r.data})),size:d.length,empty:!d.length});
+  const coll=(n,fl=[])=>{const url=`/api/c/${n}`+(fl.length?'?'+fl.map(([f,,v])=>`${encodeURIComponent(f)}=${encodeURIComponent(v)}`).join('&'):'');
+    return{where:(f,op,v)=>coll(n,[...fl,[f,op,v]]),limit(){return this},orderBy(){return this},get:async()=>qs(await api(url)),onSnapshot:(next,err)=>listen(url,qs,next,err),doc:id=>docRef(n,id||uid())}};
+  const docRef=(n,id)=>{const url=`/api/c/${n}/${encodeURIComponent(id)}`;const w=async(method,body)=>{await api(url,{method,body:body===undefined?undefined:JSON.stringify(body)});refreshAll()};
+    const one=r=>({id,exists:!!r,data:()=>r?r.data:undefined});
+    return{id,set:d=>w('PUT',d),update:d=>w('PATCH',d),delete:()=>w('DELETE'),get:async()=>one(await api(url)),onSnapshot:(next,err)=>listen(url,one,next,err)}};
+  return{collection:n=>coll(n),doc:p=>{const[n,id]=p.split('/');return docRef(n,id)},refreshAll};
+}
+
+/* ---------- state ---------- */
+const S={employees:null,projects:null,consultants:null,invoices:null,timers:null,settings:{},months:{},
+  ui:{tab:ls.get('hb-tab','time'),me:ls.get('hb-me',null),day:today(),month:addMonths(today().slice(0,7),0),editing:null,openInv:{},openLog:null,rateProject:null}};
+let DB=null,MODE='loading',USER=null,CAN_ADMIN=false,loadFail=false;
+const D={expMarkup:10,conMarkup:10,terms:30,qbService:'Professional Services',qbExpense:'Reimbursable Expenses',qbConsultant:'Outside Consultants'};
+const set=k=>S.settings[k]??D[k];
+const emp=id=>(S.employees||[]).find(e=>e.id===id);
+const proj=id=>(S.projects||[]).find(p=>p.id===id);
+const cons=id=>(S.consultants||[]).find(c=>c.id===id);
+const activeEmps=()=>(S.employees||[]).filter(e=>e.active!==false).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+const activeProjects=()=>(S.projects||[]).filter(p=>p.active!==false).sort((a,b)=>(a.client||'').localeCompare(b.client||'')||(a.name||'').localeCompare(b.name||''));
+const projLabel=p=>p?(p.client?`${p.client} · ${p.name}`:p.name):'Unknown project';
+
+const docs=snap=>snap.docs.map(d=>({id:d.id,...d.data()}));
+function watchColl(name){DB.collection(name).onSnapshot(s=>{S[name]=docs(s);schedule()},e=>{console.warn(name,e);S[name]=S[name]||[];schedule()})}
+function ensureMonth(m){
+  if(S.months[m])return;S.months[m]={entries:null,expenses:null,cbills:null};
+  for(const c of['entries','expenses','cbills'])
+    DB.collection(c).where('month','==',m).limit(1000).onSnapshot(s=>{S.months[m][c]=docs(s);schedule()},e=>{console.warn(c,e);S.months[m][c]=S.months[m][c]||[];schedule()});
+}
+const md=m=>{ensureMonth(m);const x=S.months[m];return{entries:x.entries||[],expenses:x.expenses||[],cbills:x.cbills||[],ready:!!(x.entries&&x.expenses&&x.cbills)}};
+
+async function put(coll,id,data){try{await DB.doc(`${coll}/${id}`).set(data);return true}catch(e){toast(errMsg(e));return false}}
+async function patch(coll,id,data){try{await DB.doc(`${coll}/${id}`).update(data);return true}catch(e){toast(errMsg(e));return false}}
+async function del(coll,id){try{await DB.doc(`${coll}/${id}`).delete();return true}catch(e){toast(errMsg(e));return false}}
+let SETTINGS_LOADED=false,SETTINGS_EXISTS=false;
+async function saveSetting(f,v){if(!SETTINGS_LOADED){toast('Settings are still loading. Try again in a moment.');return false}return SETTINGS_EXISTS?patch('settings','main',{[f]:v}):put('settings','main',{[f]:v})}
+function errMsg(e){return e&&e.message&&e.code!=='error'?e.message:e&&e.code==='error'&&e.message?e.message:'Couldn’t save. Check your connection and try again.'}
+async function noteMonth(m){if(!CAN_ADMIN||!SETTINGS_LOADED)return;const s=S.settings.since;if(!s||m<s)await saveSetting('since',m)}
+
+/* ---------- money math ---------- */
+function rateFor(p,empId){const e=emp(empId)||{};const r=(p&&p.rates&&p.rates[empId])||{};
+  return{bill:num(r.bill)??num(e.defaultBill)??0,cost:num(r.cost)??num(e.defaultCost)??0}}
+function markupFor(item,p,kind){return num(item.markup)??num(kind==='exp'?p?.expMarkup:p?.conMarkup)??num(set(kind==='exp'?'expMarkup':'conMarkup'))??0}
+function liveProjectMonth(p,m){
+  const d=md(m),billable=p.billable!==false;
+  const ents=d.entries.filter(e=>e.projectId===p.id);const by={};
+  ents.forEach(e=>(by[e.empId]=by[e.empId]||[]).push(e));
+  const labor=Object.entries(by).map(([id,l])=>{const h=r2(l.reduce((a,e)=>a+(+e.hours||0),0));const r=rateFor(p,id);const e=emp(id);
+    return{empId:id,name:e?.name||'Former employee',title:e?.title||'',hours:h,rate:billable?r.bill:0,amount:billable?r2(h*r.bill):0,cost:r2(h*r.cost)}}).sort((a,b)=>b.amount-a.amount||a.name.localeCompare(b.name));
+  const exps=d.expenses.filter(x=>x.projectId===p.id).map(x=>{const mk=markupFor(x,p,'exp'),c=+x.amount||0;const bill=billable&&x.billable!==false;return{...x,cost:c,mk:bill?mk:0,billed:bill?r2(c*(1+mk/100)):0}}).sort((a,b)=>a.date.localeCompare(b.date));
+  const cbs=d.cbills.filter(x=>x.projectId===p.id).map(x=>{const mk=markupFor(x,p,'con'),c=+x.amount||0;return{...x,consultant:cons(x.consultantId)?.name||'Consultant',cost:c,mk:billable?mk:0,billed:billable?r2(c*(1+mk/100)):0}}).sort((a,b)=>a.date.localeCompare(b.date));
+  const sum=(a,k)=>r2(a.reduce((s,x)=>s+x[k],0));
+  const t={hours:sum(labor,'hours'),labor:sum(labor,'amount'),laborCost:sum(labor,'cost'),exp:sum(exps,'billed'),expCost:sum(exps,'cost'),con:sum(cbs,'billed'),conCost:sum(cbs,'cost')};
+  t.total=r2(t.labor+t.exp+t.con);t.cost=r2(t.laborCost+t.expCost+t.conCost);
+  return{p,m,billable,labor,exps,cbs,ents,t}
+}
+function projectMonth(p,m){const live=liveProjectMonth(p,m);const inv=(S.invoices||[]).find(i=>i.id===`${p.id}_${m}`);
+  if(inv&&inv.status==='invoiced'&&inv.snapshot)return{...live,labor:inv.snapshot.labor||[],exps:inv.snapshot.exps||[],cbs:inv.snapshot.cbs||[],t:inv.snapshot.t,frozen:true};return live}
+function monthTotals(m){const out={hours:0,total:0,cost:0,labor:0,exp:0,con:0,laborCost:0,expCost:0,conCost:0,projects:[]};
+  const d=md(m);const ids=new Set([...d.entries,...d.expenses,...d.cbills].map(x=>x.projectId));
+  ids.forEach(id=>{const p=proj(id)||{id,name:'Deleted project',billable:true};const pm=projectMonth(p,m);out.projects.push(pm);for(const k of Object.keys(pm.t))out[k]=r2(out[k]+pm.t[k])});
+  out.projects.sort((a,b)=>b.t.total-a.t.total);out.ready=d.ready;return out}
+function invInfo(p,m){const doc=(S.invoices||[]).find(i=>i.id===`${p.id}_${m}`)||{};
+  return{number:doc.number||`${String(p.code||p.id.slice(-6)).toUpperCase().replace(/[^A-Z0-9-]/g,'').slice(0,12)}-${m.replace('-','')}`,status:doc.status||'draft',issued:doc.issued||null,doc}}
+
+/* ---------- rendering ---------- */
+let rq=false;function schedule(){if(rq)return;rq=true;requestAnimationFrame(()=>{rq=false;render()})}
+let setupDirty=false,invDirty=false,busy=false;
+const TABS=[['time','Time'],['expenses','Expenses'],['consultants','Consultants'],['invoices','Invoices'],['log','Monthly log'],['setup','Setup']];
+const ADMIN_TABS=new Set(['consultants','invoices','log','setup']);
+function render(){
+  const a=document.activeElement,aid=a&&a.id;let sel=null;try{sel=[a.selectionStart,a.selectionEnd]}catch{}
+  const tabs=TABS.filter(([k])=>CAN_ADMIN||!ADMIN_TABS.has(k));
+  if(!tabs.find(([k])=>k===S.ui.tab))S.ui.tab='time';
+  $('#tabs').innerHTML=tabs.map(([k,l])=>`<button role="tab" data-act="tab" data-tab="${k}" aria-selected="${S.ui.tab===k}">${l}</button>`).join('');
+  TABS.forEach(([k])=>$('#view-'+k).hidden=S.ui.tab!==k);
+  $('#co-name').textContent=S.settings.company||'';
+  $('#banner').innerHTML=loadFail&&!S.projects?`<div class="banner">Your data didn’t load. Check your connection, then reload the page.</div>`:'';
+  if(MODE==='loading')return;
+  renderMe();
+  ({time:renderTime,expenses:renderExpenses,consultants:renderConsultants,invoices:renderInvoices,log:renderLog,setup:renderSetup})[S.ui.tab]();
+  if(aid){const n=document.getElementById(aid);if(n&&n!==document.activeElement){n.focus();if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch{}}}
+}
+function fillSelect(el,items,placeholder){const v=el.value;el.innerHTML=(placeholder?`<option value="">${esc(placeholder)}</option>`:'')+items.map(([id,l])=>`<option value="${esc(id)}">${esc(l)}</option>`).join('');if(items.some(([id])=>id===v))el.value=v}
+function projectOptions(){return activeProjects().map(p=>[p.id,projLabel(p)])}
+function renderMe(){const s=$('#me-select');s.closest('.who').hidden=!CAN_ADMIN;if(!CAN_ADMIN){S.ui.me=USER&&USER.employeeId||null;return}const list=activeEmps();
+  if(!S.ui.me||!emp(S.ui.me)){S.ui.me=list[0]?.id||null}
+  s.innerHTML=list.length?list.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join(''):'<option value="">No employees yet</option>';
+  if(S.ui.me)s.value=S.ui.me}
+function monthNav(){$$('[data-monthnav]').forEach(n=>n.innerHTML=`<button class="btn small ghost" data-act="month" data-n="-1" aria-label="Previous month">◀</button><strong>${monthLabel(S.ui.month)}</strong><button class="btn small ghost" data-act="month" data-n="1" aria-label="Next month">▶</button>`)}
+
+function gettingStarted(){return`<div class="panel stack"><div><div class="eyebrow">Getting started</div><h2 style="font-size:18px;margin-top:4px">Set up your firm in three steps</h2></div>
+  <div class="steps"><div class="step"><b>1 · Add your people</b><span class="muted">Names, titles and default bill and cost rates.</span></div>
+  <div class="step"><b>2 · Add projects</b><span class="muted">Client name as it appears in QuickBooks, plus any project-specific rates and markups.</span></div>
+  <div class="step"><b>3 · Log time</b><span class="muted">Each person picks their name at the top, then logs hours or runs a timer.</span></div></div>
+  ${CAN_ADMIN?'<div><button class="btn primary" data-act="tab" data-tab="setup">Open Setup</button></div>':'<div class="muted">Ask the account owner to add you and your projects in Setup.</div>'}</div>`}
+
+/* TIME */
+function renderTime(){
+  const ws=weekStart(S.ui.day),we=addDays(ws,6);
+  const ready=S.employees&&S.projects;
+  if(ready&&(!activeEmps().length||!activeProjects().length)){$('#timer-slot').innerHTML=gettingStarted()}
+  else if(!S.ui.me&&!CAN_ADMIN)$('#timer-slot').innerHTML='<div class="banner">Your login isn’t linked to a person yet. Ask your admin to link it in Setup → Logins.</div>';
+  else $('#timer-slot').innerHTML=timerHTML();
+  const me=S.ui.me;const mine=[...new Set([monthOf(ws),monthOf(we)])].flatMap(m=>md(m).entries).filter(e=>e.empId===me);
+  $('#week-label').textContent=`Week of ${fmtDate(ws)}`+(ws.slice(0,4)!==today().slice(0,4)?`, ${ws.slice(0,4)}`:'');
+  let wk=0;$('#week').innerHTML=[0,1,2,3,4,5,6].map(i=>{const d=addDays(ws,i);const h=mine.filter(e=>e.date===d).reduce((a,e)=>a+(+e.hours||0),0);wk+=h;const dt=pISO(d);
+    return`<button class="day${d===today()?' today':''}" data-act="day" data-day="${d}" aria-pressed="${d===S.ui.day}"><div class="d">${dt.toLocaleDateString('en-US',{weekday:'short'})}</div><div class="n">${dt.getDate()}</div><div class="h${h?'':' zero'}">${h?fh(h):'–'}</div></button>`}).join('');
+  $('#week-label').textContent+=` · ${fh(wk)} h`;
+  const day=mine.filter(e=>e.date===S.ui.day).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  $('#day-label').textContent=S.ui.day===today()?`Today, ${fmtDate(S.ui.day)}`:fmtDateLong(S.ui.day);
+  $('#day-total').textContent=day.length?`${fh(day.reduce((a,e)=>a+(+e.hours||0),0))} h`:'';
+  fillSelect($('#e-project'),projectOptions(),'Choose a project');
+  const editing=S.ui.editing;$('#e-submit').textContent=editing?'Save changes':'Add hours';$('#e-cancel').hidden=!editing;$('#e-timer').hidden=!!editing;
+  const name=emp(me)?.name;
+  $('#day-list').innerHTML=!me?'':day.length?`<div class="tbl-wrap"><table><thead><tr><th>Project</th><th>Notes</th><th class="r">Hours</th><th></th></tr></thead><tbody>${day.map(e=>{const p=proj(e.projectId);
+    return`<tr${e.id===editing?' style="background:var(--accent-soft)"':''}><td><b>${esc(p?.name||'Unknown project')}</b><div class="muted" style="font-size:12px">${esc(p?.client||'')}</div></td><td class="note">${esc(e.note||'')}</td><td class="r num">${fh(e.hours)}</td>
+    <td class="r" style="white-space:nowrap"><button class="btn small ghost" data-act="edit-entry" data-id="${e.id}">Edit</button><button class="btn small ghost danger" data-act="del" data-c="entries" data-id="${e.id}">Delete</button></td></tr>`}).join('')}</tbody></table></div>`
+    :`<div class="empty">No time logged ${S.ui.day===today()?'today':'on this day'}${name?` for ${esc(name)}`:''}. Pick a project above and add hours or start the timer.</div>`;
+}
+function timerHTML(){const t=(S.timers||[]).find(x=>x.id===S.ui.me);if(!t||!t.startedAt)return'';const p=proj(t.projectId);
+  return`<div class="timer" role="status"><span class="dot" aria-hidden="true"></span><span class="clock" id="clock">${clock(t.startedAt)}</span>
+  <div class="what"><b>${esc(projLabel(p))}</b><span style="opacity:.85">${esc(t.note||'No notes yet')}</span></div>
+  <button class="btn" data-act="stop-timer">Stop &amp; save</button><button class="btn ghost danger" data-act="discard-timer">Discard</button></div>`}
+function clock(start){const s=Math.max(0,Math.floor((Date.now()-start)/1000));return`${Math.floor(s/3600)}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}`}
+setInterval(()=>{const c=$('#clock');const t=(S.timers||[]).find(x=>x.id===S.ui.me);if(c&&t)c.textContent=clock(t.startedAt)},1000);
+
+/* EXPENSES */
+function renderExpenses(){monthNav();fillSelect($('#x-project'),projectOptions(),'Choose a project');
+  if(!$('#x-date').value)$('#x-date').value=today();
+  const d=md(S.ui.month);const rows=d.expenses.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  let tc=0,tb=0;const body=rows.map(x=>{const p=proj(x.projectId);const bill=p?.billable!==false&&x.billable!==false;const mk=markupFor(x,p,'exp');const b=bill?r2((+x.amount||0)*(1+mk/100)):0;tc+=+x.amount||0;tb+=b;
+    return`<tr><td class="num">${fmtDate(x.date)}</td><td>${esc(p?.name||'Unknown project')}<div class="muted" style="font-size:12px">${esc(emp(x.empId)?.name||'')}</div></td><td class="note">${esc(x.description)}</td><td class="r num">${money(x.amount)}</td><td class="r num adm">${bill?mk+'%':'<span class="chip">not billed</span>'}</td><td class="r num adm">${money(b)}</td><td class="r"><button class="btn small ghost danger" data-act="del" data-c="expenses" data-id="${x.id}">Delete</button></td></tr>`}).join('');
+  $('#x-list').innerHTML=rows.length?`<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Project</th><th>Description</th><th class="r">Cost</th><th class="r adm">Markup</th><th class="r adm">Billed</th><th></th></tr></thead><tbody>${body}</tbody><tfoot><tr><td colspan="3">${monthLabel(S.ui.month)}</td><td class="r num">${money(tc)}</td><td class="adm"></td><td class="r num adm">${money(tb)}</td><td></td></tr></tfoot></table></div>`
+    :`<div class="empty">${d.ready?'No expenses in '+monthLabel(S.ui.month)+'. Add mileage, printing, travel or other costs you pass to clients.':'Loading…'}</div>`}
+
+/* CONSULTANTS */
+function renderConsultants(){monthNav();fillSelect($('#c-project'),projectOptions(),'Choose a project');
+  fillSelect($('#c-consultant'),(S.consultants||[]).filter(c=>c.active!==false).sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>[c.id,c.name+(c.firm?` (${c.firm})`:'')]),(S.consultants||[]).length?'Choose a consultant':'Add consultants in Setup');
+  if(!$('#c-date').value)$('#c-date').value=today();
+  const d=md(S.ui.month);const rows=d.cbills.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  let tc=0,tb=0;const body=rows.map(x=>{const p=proj(x.projectId);const bill=p?.billable!==false;const mk=markupFor(x,p,'con');const b=bill?r2((+x.amount||0)*(1+mk/100)):0;tc+=+x.amount||0;tb+=b;
+    return`<tr><td class="num">${fmtDate(x.date)}</td><td><b>${esc(cons(x.consultantId)?.name||'Consultant')}</b></td><td>${esc(p?.name||'Unknown project')}</td><td class="note">${esc(x.description)}</td><td class="r num">${money(x.amount)}</td><td class="r num">${bill?mk+'%':'—'}</td><td class="r num">${money(b)}</td><td class="r"><button class="btn small ghost danger" data-act="del" data-c="cbills" data-id="${x.id}">Delete</button></td></tr>`}).join('');
+  $('#c-list').innerHTML=rows.length?`<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Consultant</th><th>Project</th><th>Description</th><th class="r">Cost</th><th class="r">Markup</th><th class="r">Billed</th><th></th></tr></thead><tbody>${body}</tbody><tfoot><tr><td colspan="4">${monthLabel(S.ui.month)}</td><td class="r num">${money(tc)}</td><td></td><td class="r num">${money(tb)}</td><td></td></tr></tfoot></table></div>`
+    :`<div class="empty">${d.ready?'No consultant bills in '+monthLabel(S.ui.month)+'. Enter each sub-consultant invoice against the project it belongs to.':'Loading…'}</div>`}
+
+/* INVOICES */
+function renderInvoices(){if(document.activeElement&&document.activeElement.dataset&&document.activeElement.dataset.inv){invDirty=true;return}invDirty=false;monthNav();const m=S.ui.month;const T=monthTotals(m);
+  const billable=T.projects.filter(x=>x.billable&&(x.t.total>0||x.t.hours>0));const internal=T.projects.filter(x=>!billable.includes(x));
+  const issued=billable.filter(x=>invInfo(x.p,m).status==='invoiced').length;
+  $('#inv-summary').innerHTML=`<div class="summary">${[['To invoice',money(billable.reduce((a,x)=>a+x.t.total,0))],['Billable hours',fh(billable.reduce((a,x)=>a+x.t.hours,0))],['Projects',`${billable.length}`],['Marked invoiced',`${issued} of ${billable.length}`]].map(([k,v])=>`<div class="stat"><div class="eyebrow">${k}</div><div class="v">${v}</div></div>`).join('')}</div>`;
+  $('#qbo-hint').textContent=billable.length?`One CSV with ${billable.length} invoice${billable.length>1?'s':''}, dated ${mdy(lastDay(m))}. In QuickBooks Online: Settings ⚙ → Import data → Invoices.`:'';
+  $('[data-act="qbo"]').disabled=!billable.length;
+  $('#inv-list').innerHTML=(!T.ready?'<div class="empty">Loading…</div>':!billable.length?`<div class="panel empty">Nothing to invoice for ${monthLabel(m)} yet.</div>`:billable.map(x=>invCard(x)).join(''))
+   +(internal.length?`<div class="panel"><div class="eyebrow" style="margin-bottom:6px">Non-billable this month</div><table><tbody>${internal.map(x=>`<tr><td>${esc(projLabel(x.p))}</td><td class="r num">${fh(x.t.hours)} h</td><td class="r num muted">cost ${money(x.t.cost)}</td></tr>`).join('')}</tbody></table></div>`:'');
+}
+function invCard(x){const{p,m,t}=x;const info=invInfo(p,m);const open=S.ui.openInv[p.id];
+  const figs=[['Labor',`${fh(t.hours)} h · ${money(t.labor)}`],t.exp?['Expenses',money(t.exp)]:null,t.con?['Consultants',money(t.con)]:null].filter(Boolean);
+  return`<div class="inv"><div class="inv-h"><div class="t"><div class="muted" style="font-size:12px">${esc(p.client||'No client set')}</div><b>${esc(p.name)}</b>
+    <div class="inv-figs" style="margin-top:4px">${figs.map(([k,v])=>`<span>${k} <b>${v}</b></span>`).join('')}</div>${x.labor.some(l=>l.hours>0&&!l.rate)?`<div style="margin-top:6px"><span class="chip live">No bill rate for ${esc(x.labor.filter(l=>l.hours>0&&!l.rate).map(l=>l.name).join(', '))}. Set it in Setup.</span></div>`:''}</div>
+    <div><div class="inv-total">${money(t.total)}</div><div style="text-align:right;margin-top:4px">${info.status==='invoiced'?`<span class="chip ok" title="Amounts are locked. Move back to draft to change time or expenses for this month.">Invoiced ${info.issued?fmtDate(info.issued):''} · locked</span>`:'<span class="chip">Draft</span>'}</div></div></div>
+  <div class="inv-actions"><label class="hint" for="inv-${p.id}">Invoice #</label><input id="inv-${p.id}" class="num" style="width:150px;padding:5px 8px" value="${esc(info.number)}" data-inv="${p.id}" maxlength="21">
+    <button class="btn small" data-act="inv-pdf" data-p="${p.id}">Invoice PDF</button><button class="btn small" data-act="detail-pdf" data-p="${p.id}">Time detail PDF</button>
+    ${info.status==='invoiced'?`<button class="btn small ghost" data-act="mark" data-p="${p.id}" data-s="draft">Back to draft</button>`:`<button class="btn small" data-act="mark" data-p="${p.id}" data-s="invoiced">Mark invoiced</button>`}
+    <button class="btn small ghost" data-act="open-inv" data-p="${p.id}" style="margin-left:auto">${open?'Hide lines':'Show lines'}</button></div>
+  ${open?`<div class="inv-body tbl-wrap">${linesHTML(x)}</div>`:''}</div>`}
+function linesHTML({labor,exps,cbs,t}){let h='';
+  if(labor.length)h+=`<h4>Professional services</h4><table><thead><tr><th>Person</th><th class="r">Hours</th><th class="r">Rate</th><th class="r">Amount</th><th class="r hide-sm">Cost</th></tr></thead><tbody>${labor.map(l=>`<tr><td>${esc(l.name)}<span class="muted"> ${esc(l.title)}</span></td><td class="r num">${fh(l.hours)}</td><td class="r num">${money(l.rate)}</td><td class="r num">${money(l.amount)}</td><td class="r num muted hide-sm">${money(l.cost)}</td></tr>`).join('')}</tbody></table>`;
+  if(exps.length)h+=`<h4>Reimbursable expenses</h4><table><thead><tr><th>Date</th><th>Description</th><th class="r">Cost</th><th class="r">Markup</th><th class="r">Billed</th></tr></thead><tbody>${exps.map(e=>`<tr><td class="num">${fmtDate(e.date)}</td><td>${esc(e.description)}</td><td class="r num">${money(e.cost)}</td><td class="r num">${e.billed?e.mk+'%':'not billed'}</td><td class="r num">${money(e.billed)}</td></tr>`).join('')}</tbody></table>`;
+  if(cbs.length)h+=`<h4>Outside consultants</h4><table><thead><tr><th>Date</th><th>Consultant</th><th>Description</th><th class="r">Cost</th><th class="r">Markup</th><th class="r">Billed</th></tr></thead><tbody>${cbs.map(e=>`<tr><td class="num">${fmtDate(e.date)}</td><td>${esc(e.consultant)}</td><td>${esc(e.description)}</td><td class="r num">${money(e.cost)}</td><td class="r num">${e.mk}%</td><td class="r num">${money(e.billed)}</td></tr>`).join('')}</tbody></table>`;
+  h+=`<table><tfoot><tr><td>Total billable</td><td class="r num">${money(t.total)}</td></tr><tr><td class="muted" style="font-weight:500">Total cost · margin</td><td class="r num muted" style="font-weight:500">${money(t.cost)} · ${money(t.total-t.cost)}</td></tr></tfoot></table>`;return h}
+
+/* LOG */
+function logMonths(){const cur=today().slice(0,7);let s=S.settings.since||cur;if(s>cur)s=cur;const out=[];for(let m=cur;m>=s&&out.length<36;m=addMonths(m,-1))out.push(m);return out}
+function renderLog(){const months=logMonths();const rows=months.map(m=>({m,T:monthTotals(m)}));const max=Math.max(1,...rows.map(r=>Math.max(r.T.total,r.T.cost)));
+  const cur=today().slice(0,7);
+  $('#log-table').innerHTML=`<table><thead><tr><th>Month</th><th class="r">Hours</th><th class="r">Billable</th><th class="r">Cost</th><th class="r">Margin</th><th class="r hide-sm">%</th></tr></thead><tbody>${rows.map(({m,T})=>{const mg=T.total-T.cost;const open=S.ui.openLog===m;
+    return`<tr class="log-row" data-act="open-log" data-m="${m}"><td><b>${monthLabel(m)}</b> ${m===cur?'<span class="chip live">In progress</span>':''}<div class="bar" style="width:${(T.total/max*100).toFixed(1)}%"></div><div class="bar cost" style="width:${(T.cost/max*100).toFixed(1)}%"></div></td>
+    <td class="r num">${T.ready?fh(T.hours):'…'}</td><td class="r num">${money(T.total)}</td><td class="r num">${money(T.cost)}</td><td class="r num" style="color:${mg<0?'var(--warn)':'inherit'}">${money(mg)}</td><td class="r num hide-sm">${T.total?Math.round(mg/T.total*100)+'%':'–'}</td></tr>
+    ${open?`<tr><td colspan="6" style="background:var(--sunk);padding:4px 10px 12px">${logDetail(T)}</td></tr>`:''}`}).join('')}</tbody></table>
+    <div class="hint" style="padding:10px">Click a month for the project breakdown. Billable includes marked-up expenses and consultants; cost is labor at cost rates plus what you paid out.</div>`;
+  const chartRows=rows.slice(0,12).reverse();const W=640,H=170,pl=48,pb=22,pt=10;const bw=(W-pl-10)/Math.max(chartRows.length,1);
+  const ticks=[0,.5,1].map(f=>f*max);
+  $('#log-chart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Billable and cost by month">${ticks.map(v=>{const y=pt+(H-pt-pb)*(1-v/max);return`<line x1="${pl}" x2="${W-6}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${pl-6}" y="${y+4}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="JetBrains Mono,monospace">${money0(v)}</text>`}).join('')}
+    ${chartRows.map((r,i)=>{const x=pl+i*bw+bw*.15,w=bw*.33,h1=(H-pt-pb)*r.T.total/max,h2=(H-pt-pb)*r.T.cost/max;return`<rect x="${x}" y="${H-pb-h1}" width="${w}" height="${h1}" rx="2" fill="var(--accent)"><title>${monthLabel(r.m)} billable ${money(r.T.total)}</title></rect><rect x="${x+w+2}" y="${H-pb-h2}" width="${w}" height="${h2}" rx="2" fill="var(--cost)"><title>${monthLabel(r.m)} cost ${money(r.T.cost)}</title></rect><text x="${x+w}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--muted)">${monthShort(r.m)}</text>`}).join('')}</svg>`}
+function logDetail(T){if(!T.projects.length)return'<div class="muted" style="padding:8px 0">No activity.</div>';
+  return`<table><thead><tr><th>Project</th><th class="r">Hours</th><th class="r hide-sm">Labor</th><th class="r hide-sm">Expenses</th><th class="r hide-sm">Consultants</th><th class="r">Billable</th><th class="r">Cost</th></tr></thead><tbody>${T.projects.map(x=>`<tr><td>${esc(projLabel(x.p))}${x.billable?'':' <span class="chip">internal</span>'}</td><td class="r num">${fh(x.t.hours)}</td><td class="r num hide-sm">${money(x.t.labor)}</td><td class="r num hide-sm">${money(x.t.exp)}</td><td class="r num hide-sm">${money(x.t.con)}</td><td class="r num">${money(x.t.total)}</td><td class="r num">${money(x.t.cost)}</td></tr>`).join('')}</tbody>
+  <tfoot><tr><td>Total</td><td class="r num">${fh(T.hours)}</td><td class="r num hide-sm">${money(T.labor)}</td><td class="r num hide-sm">${money(T.exp)}</td><td class="r num hide-sm">${money(T.con)}</td><td class="r num">${money(T.total)}</td><td class="r num">${money(T.cost)}</td></tr></tfoot></table>`}
+
+/* SETUP */
+const inp=(c,id,f,v,o={})=>`<input id="s-${c}-${id}-${f}" data-c="${c}" data-id="${id}" data-f="${f}" data-t="${o.t||'text'}" value="${esc(v??'')}" class="${o.n?'n':''}" ${o.n?'inputmode="decimal"':''} placeholder="${esc(o.ph||'')}" aria-label="${esc(o.label||f)}">`;
+const chk=(c,id,f,v,label)=>`<input type="checkbox" id="s-${c}-${id}-${f}" data-c="${c}" data-id="${id}" data-f="${f}" data-t="bool" ${v?'checked':''} aria-label="${esc(label)}">`;
+function renderSetup(){
+  if($('#view-setup').contains(document.activeElement)&&document.activeElement.tagName!=='BUTTON'){setupDirty=true;return}
+  setupDirty=false;const E=(S.employees||[]).slice().sort((a,b)=>(a.active===false)-(b.active===false)||(a.name||'').localeCompare(b.name||''));
+  $('#set-people').innerHTML=`<div class="section-h"><h2>People</h2><button class="btn small" data-act="add" data-c="employees">+ Add person</button></div>
+  ${E.length?`<div class="tbl-wrap"><table class="edit-tbl"><thead><tr><th>Name</th><th>Title (shown on invoice)</th><th class="r">Default bill $/h</th><th class="r">Default cost $/h</th><th>Active</th></tr></thead><tbody>${E.map(e=>`<tr><td>${inp('employees',e.id,'name',e.name,{label:'Name'})}</td><td>${inp('employees',e.id,'title',e.title,{label:'Title'})}</td><td class="r">${inp('employees',e.id,'defaultBill',e.defaultBill,{t:'num',n:1,label:'Default bill rate'})}</td><td class="r">${inp('employees',e.id,'defaultCost',e.defaultCost,{t:'num',n:1,label:'Default cost rate'})}</td><td>${chk('employees',e.id,'active',e.active!==false,'Active')}</td></tr>`).join('')}</tbody></table></div>
+  <div class="hint">Cost rate is what an hour costs you (wage plus burden). Rates can be overridden per project below.</div>`:'<div class="empty">Add each person who logs time.</div>'}`;
+  const P=(S.projects||[]).slice().sort((a,b)=>(a.active===false)-(b.active===false)||(a.client||'').localeCompare(b.client||''));
+  $('#set-projects').innerHTML=`<div class="section-h"><h2>Projects</h2><button class="btn small" data-act="add" data-c="projects">+ Add project</button></div>
+  ${P.length?`<div class="tbl-wrap"><table class="edit-tbl"><thead><tr><th>Project</th><th>Client (QuickBooks customer)</th><th>Code</th><th class="r">Expense markup %</th><th class="r">Consultant markup %</th><th>Billable</th><th>Active</th></tr></thead><tbody>${P.map(p=>`<tr><td>${inp('projects',p.id,'name',p.name,{label:'Project name'})}</td><td>${inp('projects',p.id,'client',p.client,{label:'Client',ph:'Exact QuickBooks name'})}</td><td style="width:110px">${inp('projects',p.id,'code',p.code,{label:'Code',ph:'e.g. 2614'})}</td><td class="r">${inp('projects',p.id,'expMarkup',p.expMarkup,{t:'num',n:1,ph:String(set('expMarkup')),label:'Expense markup'})}</td><td class="r">${inp('projects',p.id,'conMarkup',p.conMarkup,{t:'num',n:1,ph:String(set('conMarkup')),label:'Consultant markup'})}</td><td>${chk('projects',p.id,'billable',p.billable!==false,'Billable')}</td><td>${chk('projects',p.id,'active',p.active!==false,'Active')}</td></tr>`).join('')}</tbody></table></div>
+  <div class="hint">The client name must match the customer in QuickBooks exactly so imports attach to the right customer. Turn off Billable for internal work like admin or marketing; that time counts as cost only.</div>`:'<div class="empty">Add the projects your team bills time to.</div>'}`;
+  const AP=activeProjects();if(!proj(S.ui.rateProject)||proj(S.ui.rateProject).active===false)S.ui.rateProject=AP[0]?.id||null;const rp=proj(S.ui.rateProject);
+  $('#set-rates').innerHTML=`<div class="section-h"><h2>Project rates</h2>${AP.length?`<select id="rate-proj" data-act-change="rate-proj" aria-label="Project">${AP.map(p=>`<option value="${p.id}" ${p.id===S.ui.rateProject?'selected':''}>${esc(projLabel(p))}</option>`).join('')}</select>`:''}</div>
+  ${rp&&activeEmps().length?`<div class="tbl-wrap"><table class="edit-tbl"><thead><tr><th>Person</th><th class="r">Bill $/h</th><th class="r">Cost $/h</th></tr></thead><tbody>${activeEmps().map(e=>{const r=(rp.rates||{})[e.id]||{};return`<tr><td>${esc(e.name)}</td><td class="r">${inp('rates',rp.id+'~'+e.id,'bill',r.bill,{t:'num',n:1,ph:e.defaultBill??'',label:'Bill rate'})}</td><td class="r">${inp('rates',rp.id+'~'+e.id,'cost',r.cost,{t:'num',n:1,ph:e.defaultCost??'',label:'Cost rate'})}</td></tr>`}).join('')}</tbody></table></div><div class="hint">Leave blank to use the person’s default rate (shown faintly).</div>`:'<div class="empty">Add people and projects first.</div>'}`;
+  const C=(S.consultants||[]).slice().sort((a,b)=>(a.active===false)-(b.active===false)||(a.name||'').localeCompare(b.name||''));
+  $('#set-consultants').innerHTML=`<div class="section-h"><h2>Outside consultants</h2><button class="btn small" data-act="add" data-c="consultants">+ Add consultant</button></div>
+  ${C.length?`<div class="tbl-wrap"><table class="edit-tbl"><thead><tr><th>Name</th><th>Firm / specialty</th><th>Active</th></tr></thead><tbody>${C.map(c=>`<tr><td>${inp('consultants',c.id,'name',c.name,{label:'Name'})}</td><td>${inp('consultants',c.id,'firm',c.firm,{label:'Firm'})}</td><td>${chk('consultants',c.id,'active',c.active!==false,'Active')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Add the sub-consultants whose bills you pass through.</div>'}`;
+  renderUsers();
+  const st=S.settings;
+  $('#set-company').innerHTML=`<h2 style="font-size:16px">Company &amp; invoice defaults</h2>
+  <div class="row"><div class="field grow"><label for="s-settings-main-company">Company name</label>${inp('settings','main','company',st.company,{label:'Company'})}</div>
+  <div class="field" style="flex:2 1 260px"><label for="s-settings-main-address">Address (one line per row on the PDF)</label><textarea id="s-settings-main-address" data-c="settings" data-id="main" data-f="address" data-t="text" rows="2">${esc(st.address||'')}</textarea></div></div>
+  <div class="row"><div class="field" style="width:120px"><label for="s-settings-main-terms">Terms (days)</label>${inp('settings','main','terms',st.terms,{t:'num',n:1,ph:'30',label:'Terms'})}</div>
+  <div class="field" style="width:150px"><label for="s-settings-main-expMarkup">Expense markup %</label>${inp('settings','main','expMarkup',st.expMarkup,{t:'num',n:1,ph:'10',label:'Expense markup'})}</div>
+  <div class="field" style="width:160px"><label for="s-settings-main-conMarkup">Consultant markup %</label>${inp('settings','main','conMarkup',st.conMarkup,{t:'num',n:1,ph:'10',label:'Consultant markup'})}</div>
+  <div class="field" style="width:150px"><label for="s-settings-main-since">Log starts (YYYY-MM)</label>${inp('settings','main','since',st.since,{ph:today().slice(0,7),label:'Log starts'})}</div></div>
+  <div><div class="eyebrow" style="margin-bottom:6px">QuickBooks products/services used on import</div><div class="row">
+  <div class="field grow"><label for="s-settings-main-qbService">Labor</label>${inp('settings','main','qbService',st.qbService,{ph:D.qbService,label:'Labor item'})}</div>
+  <div class="field grow"><label for="s-settings-main-qbExpense">Expenses</label>${inp('settings','main','qbExpense',st.qbExpense,{ph:D.qbExpense,label:'Expense item'})}</div>
+  <div class="field grow"><label for="s-settings-main-qbConsultant">Consultants</label>${inp('settings','main','qbConsultant',st.qbConsultant,{ph:D.qbConsultant,label:'Consultant item'})}</div></div>
+  <div class="hint" style="margin-top:6px">These names must exist as products/services in QuickBooks, or QuickBooks offers to create them during import.</div></div>`;
+}
+function renderUsers(){const box=$('#set-users');if(!box)return;const U=S.users;
+  const empOpts=sel=>`<option value="">— none —</option>`+activeEmps().map(e=>`<option value="${e.id}" ${e.id===sel?'selected':''}>${esc(e.name)}</option>`).join('');
+  const link=S.ui.lastLink;
+  box.innerHTML=`<div class="section-h"><h2>Logins</h2></div>
+  <div class="hint">Each login gets a one-time setup link (good for 7 days) where the person chooses their own password. Staff see only their own time and expenses; admins see rates, invoices and Setup.</div>
+  ${link?`<div class="linkbox"><b>Setup link for ${esc(link.username)}</b><code id="setup-link-text">${esc(link.url)}</code><button class="btn small" data-act="copy-link">Copy</button><button class="btn small ghost" data-act="hide-link">Done</button></div>`:''}
+  ${!U?'<div class="empty">Loading logins…</div>':`<div class="tbl-wrap"><table class="edit-tbl"><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Logs time as</th><th>Status</th><th>Active</th><th></th></tr></thead><tbody>${U.map(u=>`<tr>
+    <td><b>${esc(u.username)}</b>${u.id===USER.id?' <span class="chip">you</span>':''}</td>
+    <td><input id="u-${u.id}-name" data-user="${u.id}" data-uf="name" value="${esc(u.name)}" aria-label="Name"></td>
+    <td><select id="u-${u.id}-role" data-user="${u.id}" data-uf="role" aria-label="Role"><option value="staff" ${u.role==='staff'?'selected':''}>Staff</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></td>
+    <td><select id="u-${u.id}-emp" data-user="${u.id}" data-uf="employeeId" aria-label="Person">${empOpts(u.employeeId)}</select></td>
+    <td>${u.hasPassword?'<span class="chip ok">Active</span>':u.setupPending?'<span class="chip live">Link sent</span>':'<span class="chip">No password</span>'}</td>
+    <td><input type="checkbox" id="u-${u.id}-active" data-user="${u.id}" data-uf="active" ${u.active?'checked':''} aria-label="Active"></td>
+    <td class="r"><button class="btn small ghost" data-act="user-link" data-id="${u.id}">${u.hasPassword?'Reset password':'New setup link'}</button></td></tr>`).join('')}</tbody></table></div>`}
+  <form id="user-form" class="row" autocomplete="off">
+    <div class="field" style="width:160px"><label for="nu-username">Username</label><input id="nu-username" required placeholder="e.g. jsmith"></div>
+    <div class="field grow"><label for="nu-name">Name</label><input id="nu-name" placeholder="Jordan Smith"></div>
+    <div class="field" style="width:120px"><label for="nu-role">Role</label><select id="nu-role"><option value="staff">Staff</option><option value="admin">Admin</option></select></div>
+    <div class="field grow"><label for="nu-emp">Logs time as</label><select id="nu-emp">${empOpts('')}</select></div>
+    <button class="btn" type="submit">Add login</button>
+  </form>`}
+async function loadUsers(){try{S.users=await api('/api/users')}catch(e){toast(errMsg(e))}if(S.ui.tab==='setup'){setupDirty=false;renderSetup()}}
+const setupURL=t=>`${location.origin}/setup?token=${encodeURIComponent(t)}`;
+document.addEventListener('submit',async ev=>{if(ev.target.id!=='user-form')return;ev.preventDefault();
+  try{const r=await api('/api/users',{method:'POST',body:JSON.stringify({username:$('#nu-username').value.trim(),name:$('#nu-name').value.trim(),role:$('#nu-role').value,employeeId:$('#nu-emp').value||null})});
+    S.ui.lastLink={username:r.user.username,url:setupURL(r.setupToken)};$('#nu-username').value='';$('#nu-name').value='';document.activeElement.blur();await loadUsers();toast('Login added. Send them the setup link.')}catch(e){toast(errMsg(e))}});
+document.addEventListener('focusout',()=>setTimeout(()=>{if(setupDirty&&S.ui.tab==='setup')renderSetup();if(invDirty&&S.ui.tab==='invoices')renderInvoices()},50));
+
+/* ---------- actions ---------- */
+document.addEventListener('change',async ev=>{const el=ev.target;
+  if(el.id==='me-select'){S.ui.me=el.value;ls.set('hb-me',el.value);S.ui.editing=null;render();return}
+  if(el.id==='rate-proj'){S.ui.rateProject=el.value;el.blur();setupDirty=false;renderSetup();return}
+  if(el.dataset.user){const v=el.type==='checkbox'?el.checked:el.value;try{await api(`/api/users/${el.dataset.user}`,{method:'PATCH',body:JSON.stringify({[el.dataset.uf]:v||(el.dataset.uf==='employeeId'?null:v)})});toast('Saved')}catch(e){toast(errMsg(e))}el.blur();loadUsers();return}
+  if(el.dataset.inv){const p=el.dataset.inv,m=S.ui.month;const i=invInfo(proj(p),m);const{id:_x,...rest}=i.doc;await put('invoices',`${p}_${m}`,{...rest,projectId:p,month:m,number:el.value.trim()||i.number,status:i.status});return}
+  const{c,id,f,t}=el.dataset;if(!c)return;
+  let v=t==='bool'?el.checked:t==='num'?num(el.value):el.value.trim();
+  if(c==='settings'&&f==='since'&&v&&!/^\d{4}-\d{2}$/.test(v)){toast('Use the form YYYY-MM, e.g. 2026-01');return}
+  if(c==='rates'){const[pid,eid]=id.split('~');const p=proj(pid);const rates={...(p.rates||{})};rates[eid]={...(rates[eid]||{}),[f]:v};await patch('projects',pid,{rates});return}
+  if(c==='settings'){await saveSetting(f,v);return}
+  await patch(c,id,{[f]:v});
+});
+document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(b.classList.contains('danger')&&!b.dataset.armed){b.dataset.armed='1';const t=b.textContent;b.textContent='Confirm';setTimeout(()=>{delete b.dataset.armed;b.textContent=t},3000);return}
+  const me=S.ui.me;
+  switch(a){
+  case'tab':S.ui.tab=b.dataset.tab;ls.set('hb-tab',S.ui.tab);if(S.ui.tab==='setup'&&CAN_ADMIN)loadUsers();render();break;
+  case'logout':try{await api('/api/logout',{method:'POST'})}catch{}location.href='/';break;
+  case'user-link':try{const r=await api(`/api/users/${b.dataset.id}/setup-link`,{method:'POST'});const u=(S.users||[]).find(x=>String(x.id)===b.dataset.id);S.ui.lastLink={username:u?u.username:'',url:setupURL(r.setupToken)};await loadUsers()}catch(e){toast(errMsg(e))}break;
+  case'copy-link':{const t=$('#setup-link-text').textContent;try{await navigator.clipboard.writeText(t);toast('Copied')}catch{const r=document.createRange();r.selectNodeContents($('#setup-link-text'));const sel=getSelection();sel.removeAllRanges();sel.addRange(r);toast('Selected. Press Ctrl+C or ⌘C to copy.')}break}
+  case'hide-link':S.ui.lastLink=null;renderSetup();break;
+  case'week':S.ui.day=addDays(S.ui.day,+b.dataset.n);S.ui.editing=null;render();break;
+  case'today':S.ui.day=today();S.ui.editing=null;render();break;
+  case'day':S.ui.day=b.dataset.day;S.ui.editing=null;render();break;
+  case'month':S.ui.month=addMonths(S.ui.month,+b.dataset.n);render();break;
+  case'del':if(b.dataset.c==='entries'&&S.ui.editing===b.dataset.id)resetEntryForm();if(await del(b.dataset.c,b.dataset.id))toast('Deleted');break;
+  case'edit-entry':{const m=monthOf(S.ui.day);const e=md(m).entries.find(x=>x.id===b.dataset.id);if(!e)break;S.ui.editing=e.id;$('#e-project').value=e.projectId;$('#e-note').value=e.note||'';$('#e-hours').value=fh(e.hours);render();$('#e-hours').focus();break}
+  case'cancel-edit':resetEntryForm();render();break;
+  case'start-timer':{if(!me){toast('Add yourself in Setup first.');break}const pid=$('#e-project').value;if(!pid){toast('Choose a project, then start the timer.');$('#e-project').focus();break}
+    if((S.timers||[]).find(x=>x.id===me&&x.startedAt)){toast('A timer is already running. Stop it first.');break}
+    if(await put('timers',me,{projectId:pid,note:$('#e-note').value.trim(),startedAt:Date.now()})){$('#e-note').value='';toast('Timer started')}break}
+  case'stop-timer':{const t=(S.timers||[]).find(x=>x.id===me);if(!t||busy)break;busy=true;b.disabled=true;try{const h=Math.max(.1,Math.ceil((Date.now()-t.startedAt)/360000)/10);const d=iso(new Date(t.startedAt));
+    if(await put('entries',uid(),{date:d,month:monthOf(d),empId:me,projectId:t.projectId,hours:r2(h),note:t.note||'',createdAt:Date.now()})){await del('timers',me);noteMonth(monthOf(d));S.ui.day=d;toast(h>12?`Saved ${fh(h)} h on ${fmtDate(d)}. That’s long; edit it if the timer was left running.`:`Saved ${fh(h)} h`)}}finally{busy=false}break}
+  case'discard-timer':if(await del('timers',me))toast('Timer discarded');break;
+  case'open-inv':S.ui.openInv[b.dataset.p]=!S.ui.openInv[b.dataset.p];renderInvoices();break;
+  case'open-log':S.ui.openLog=S.ui.openLog===b.dataset.m?null:b.dataset.m;renderLog();break;
+  case'mark':{const p=proj(b.dataset.p),m=S.ui.month;const i=invInfo(p,m);const Lv=liveProjectMonth(p,m);const T=Lv.t;await put('invoices',`${p.id}_${m}`,{projectId:p.id,month:m,number:($(`#inv-${p.id}`)?.value||i.number).trim(),status:b.dataset.s,issued:b.dataset.s==='invoiced'?today():null,total:T.total,snapshot:b.dataset.s==='invoiced'?{labor:Lv.labor,exps:Lv.exps,cbs:Lv.cbs,t:Lv.t}:null});break}
+  case'inv-pdf':pdfInvoice(proj(b.dataset.p),S.ui.month);break;
+  case'detail-pdf':pdfDetail(proj(b.dataset.p),S.ui.month);break;
+  case'qbo':exportQBO(S.ui.month);break;
+  case'add':{const c=b.dataset.c,id=uid();const base=c==='employees'?{name:'New person',title:'',defaultBill:null,defaultCost:null,active:true,createdAt:Date.now()}
+      :c==='projects'?{name:'New project',client:'',code:'',billable:true,active:true,rates:{},createdAt:Date.now()}:{name:'New consultant',firm:'',active:true,createdAt:Date.now()};
+    await put(c,id,base);setTimeout(()=>{const n=document.getElementById(`s-${c}-${id}-name`);if(n){n.focus();n.select()}},300);break}
+  }
+});
+function resetEntryForm(){S.ui.editing=null;$('#e-note').value='';$('#e-hours').value=''}
+$('#entry-form').addEventListener('submit',async ev=>{ev.preventDefault();const me=S.ui.me;if(!me){toast('Add yourself in Setup first.');return}
+  const pid=$('#e-project').value,h=parseHours($('#e-hours').value);
+  if(!pid){toast('Choose a project.');return}if(!(h>0)||h>24){toast('Enter hours between 0 and 24, like 1.5 or 1:30.');$('#e-hours').focus();return}
+  const d=S.ui.day,data={date:d,month:monthOf(d),empId:me,projectId:pid,hours:r2(h),note:$('#e-note').value.trim()};
+  if(busy)return;busy=true;let ok;try{if(S.ui.editing){ok=await patch('entries',S.ui.editing,data);if(ok)toast('Saved')}else{ok=await put('entries',uid(),{...data,createdAt:Date.now()});if(ok)noteMonth(data.month)}}finally{busy=false}
+  if(!ok)return;resetEntryForm();render();$('#e-note').focus()});
+$('#x-form').addEventListener('submit',async ev=>{ev.preventDefault();const raw=num($('#x-amount').value.replace(/[$,]/g,''));if(raw==null){toast('Enter the cost as a number.');return}const amt=r2(raw);
+  if(busy)return;const d=$('#x-date').value;busy=true;const ok=await put('expenses',uid(),{date:d,month:monthOf(d),projectId:$('#x-project').value,empId:S.ui.me||null,description:$('#x-desc').value.trim(),amount:amt,markup:num($('#x-markup').value),billable:$('#x-billable').checked,createdAt:Date.now()});busy=false;if(!ok)return;
+  noteMonth(monthOf(d));$('#x-desc').value='';$('#x-amount').value='';$('#x-markup').value='';if(monthOf(d)!==S.ui.month){S.ui.month=monthOf(d);render()}toast('Expense added')});
+$('#c-form').addEventListener('submit',async ev=>{ev.preventDefault();const raw=num($('#c-amount').value.replace(/[$,]/g,''));if(raw==null){toast('Enter the cost as a number.');return}const amt=r2(raw);
+  if(!$('#c-consultant').value){toast('Add the consultant in Setup first.');return}
+  if(busy)return;const d=$('#c-date').value;busy=true;const ok=await put('cbills',uid(),{date:d,month:monthOf(d),projectId:$('#c-project').value,consultantId:$('#c-consultant').value,description:$('#c-desc').value.trim(),amount:amt,markup:num($('#c-markup').value),createdAt:Date.now()});busy=false;if(!ok)return;
+  noteMonth(monthOf(d));$('#c-desc').value='';$('#c-amount').value='';$('#c-markup').value='';if(monthOf(d)!==S.ui.month){S.ui.month=monthOf(d);render()}toast('Consultant bill added')});
+
+/* ---------- exports ---------- */
+async function saveFile(filename,data){const blob=data instanceof Blob?data:new Blob([data],{type:filename.endsWith('.csv')?'text/csv;charset=utf-8':'application/octet-stream'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),10000)}
+const dueDate=m=>addDays(lastDay(m),num(set('terms'))??30);
+const csvCell=v=>{v=String(v??'').replace(/[\u2013\u2014]/g,'-');return/[",\r\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v};
+function exportQBO(m){const T=monthTotals(m);const list=T.projects.filter(x=>x.billable&&x.t.total>0);if(!list.length)return;
+  const missing=list.filter(x=>!x.p.client);if(missing.length){toast(`Add a QuickBooks client to: ${missing.map(x=>x.p.name).join(', ')}`);return}
+  const nums=list.map(x=>invInfo(x.p,m).number);const dup=nums.find((n,i)=>nums.indexOf(n)!==i);if(dup){toast(`Invoice # ${dup} is used twice. Give each project its own number.`);return}
+  const head=['InvoiceNo','Customer','InvoiceDate','DueDate','Terms','Memo','Item(Product/Service)','ItemDescription','ItemQuantity','ItemRate','ItemAmount','Service Date'];
+  const rows=[head];const terms=`Net ${num(set('terms'))??30}`;
+  list.forEach(x=>{const{p}=x;const n=invInfo(p,m).number;const base=[n,p.client,mdy(lastDay(m)),mdy(dueDate(m)),terms,`${p.name}${p.code?' ('+p.code+')':''} — ${monthLabel(m)}`];
+    x.labor.filter(l=>l.amount>0).forEach(l=>rows.push([...base,set('qbService'),`${l.name}${l.title?', '+l.title:''} — ${p.name}, ${monthLabel(m)}`,fh(l.hours),l.rate.toFixed(2),l.amount.toFixed(2),mdy(lastDay(m))]));
+    x.exps.filter(e=>e.billed).forEach(e=>rows.push([...base,set('qbExpense'),e.description,'1',e.billed.toFixed(2),e.billed.toFixed(2),mdy(e.date)]));
+    x.cbs.filter(e=>e.billed>0).forEach(e=>rows.push([...base,set('qbConsultant'),`${e.consultant}: ${e.description}`,'1',e.billed.toFixed(2),e.billed.toFixed(2),mdy(e.date)]))});
+  saveFile(`quickbooks-invoices-${m}.csv`,'\uFEFF'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n'))}
+function pdfBase(title){if(!window.jspdf){toast('The PDF tool didn’t load. Reload the page and try again.');return null}
+  const doc=new window.jspdf.jsPDF({unit:'pt',format:'letter'});const W=doc.internal.pageSize.getWidth(),M=50;
+  doc.setFont('helvetica','bold');doc.setFontSize(15);doc.setTextColor(24,33,29);doc.text(S.settings.company||'Your firm',M,58);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(95,105,100);(S.settings.address||'').split('\n').filter(Boolean).forEach((l,i)=>doc.text(l,M,74+i*12));
+  doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(29,107,85);doc.text(title,W-M,58,{align:'right'});return{doc,W,M}}
+function metaBlock(doc,W,M,pairs){doc.setFontSize(9);pairs.forEach(([k,v],i)=>{doc.setFont('helvetica','normal');doc.setTextColor(110,118,114);doc.text(k,W-M-150,76+i*13);doc.setTextColor(24,33,29);doc.setFont('helvetica','bold');doc.text(String(v),W-M,76+i*13,{align:'right'})})}
+function partyBlock(doc,M,y,p,m){doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(110,118,114);doc.text('BILL TO',M,y);doc.text('PROJECT',M+270,y);
+  doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(24,33,29);doc.text(doc.splitTextToSize(p.client||'—',240).slice(0,2),M,y+15);const pn=doc.splitTextToSize(`${p.name}${p.code?' ('+p.code+')':''}`,240).slice(0,2);doc.text(pn,M+270,y+15);
+  doc.setFontSize(9);doc.setTextColor(95,105,100);doc.text(`Services for ${monthLabel(m)}`,M+270,y+15+pn.length*13+4)}
+const tStyle=M=>({theme:'striped',margin:{left:M,right:M},headStyles:{fillColor:[29,107,85],textColor:255,fontSize:8,fontStyle:'bold'},bodyStyles:{fontSize:9,textColor:[24,33,29]},showFoot:'lastPage',footStyles:{fillColor:[238,241,237],textColor:[24,33,29],fontStyle:'bold',fontSize:9},alternateRowStyles:{fillColor:[247,249,246]}});
+const R=c=>({content:c,styles:{halign:'right'}});
+async function pdfInvoice(p,m){const b=pdfBase('INVOICE');if(!b)return;const{doc,W,M}=b;const x=projectMonth(p,m);const info=invInfo(p,m);
+  metaBlock(doc,W,M,[['Invoice #',info.number],['Invoice date',fmtDate(lastDay(m))+', '+m.slice(0,4)],['Due',fmtDate(dueDate(m))+', '+dueDate(m).slice(0,4)],['Terms',`Net ${num(set('terms'))??30}`]]);
+  partyBlock(doc,M,140,p,m);let y=205;
+  const section=(title,head,body,foot)=>{if(y>doc.internal.pageSize.getHeight()-120){doc.addPage();y=60}doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(24,33,29);doc.text(title,M,y);
+    doc.autoTable({...tStyle(M),startY:y+6,head:[head],body,foot:[foot]});y=doc.lastAutoTable.finalY+24};
+  if(x.labor.length)section('Professional services',['Name','Title',R('Hours'),R('Rate'),R('Amount')],x.labor.map(l=>[l.name,l.title,R(fh(l.hours)),R(money(l.rate)),R(money(l.amount))]),['Subtotal','',R(fh(x.t.hours)),'',R(money(x.t.labor))]);
+  const ex=x.exps.filter(e=>e.billed);if(ex.length)section('Reimbursable expenses',['Date','Description',R('Amount')],ex.map(e=>[fmtDate(e.date),e.description,R(money(e.billed))]),['Subtotal','',R(money(x.t.exp))]);
+  if(x.cbs.length)section('Outside consultants',['Date','Consultant','Description',R('Amount')],x.cbs.map(e=>[fmtDate(e.date),e.consultant,e.description,R(money(e.billed))]),['Subtotal','','',R(money(x.t.con))]);
+  if(y>doc.internal.pageSize.getHeight()-80){doc.addPage();y=60}
+  doc.setDrawColor(29,107,85);doc.setLineWidth(1);doc.line(W-M-220,y-8,W-M,y-8);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(24,33,29);doc.text('Total due',W-M-220,y+8);doc.text(money(x.t.total),W-M,y+8,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(110,118,114);doc.text('Detailed time log available on request.',M,y+8);
+  await saveFile(`${info.number} ${p.client||p.name}.pdf`.replace(/[\\/:*?"<>|]/g,'-'),doc.output('blob'))}
+async function pdfDetail(p,m){const b=pdfBase('TIME DETAIL');if(!b)return;const{doc,W,M}=b;const x=projectMonth(p,m);const info=invInfo(p,m);
+  metaBlock(doc,W,M,[['Invoice #',info.number],['Period',monthLabel(m)],['Total hours',fh(x.t.hours)]]);partyBlock(doc,M,140,p,m);
+  const ents=x.ents.slice().sort((a,b)=>a.date.localeCompare(b.date)||(emp(a.empId)?.name||'').localeCompare(emp(b.empId)?.name||''));
+  doc.autoTable({...tStyle(M),startY:200,head:[['Date','Person','Description',R('Hours')]],body:ents.map(e=>[fmtDate(e.date),emp(e.empId)?.name||'Former employee',e.note||'',R(fh(e.hours))]),foot:[['Total','','',R(fh(x.t.hours))]],columnStyles:{0:{cellWidth:52},1:{cellWidth:110},3:{cellWidth:50}}});
+  let y=doc.lastAutoTable.finalY+24;if(y>doc.internal.pageSize.getHeight()-120){doc.addPage();y=60}
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(24,33,29);doc.text('Summary by person',M,y);
+  doc.autoTable({...tStyle(M),startY:y+6,head:[['Name','Title',R('Hours')]],body:x.labor.map(l=>[l.name,l.title,R(fh(l.hours))]),tableWidth:320});
+  await saveFile(`${info.number} time detail.pdf`.replace(/[\\/:*?"<>|]/g,'-'),doc.output('blob'))}
+
+/* ---------- sign-in & boot ---------- */
+function showAuth(mode){$('#view-auth').hidden=false;$('#login-form').hidden=mode!=='login';$('#setup-form').hidden=mode!=='setup';TABS.forEach(([k])=>$('#view-'+k).hidden=true)}
+$('#login-form').addEventListener('submit',async ev=>{ev.preventDefault();$('#l-err').textContent='';
+  try{await api('/api/login',{method:'POST',noRedirect:true,body:JSON.stringify({username:$('#l-user').value.trim(),password:$('#l-pass').value})});location.href='/'}
+  catch(e){$('#l-err').textContent=e.message;$('#l-pass').select()}});
+$('#setup-form').addEventListener('submit',async ev=>{ev.preventDefault();$('#s-err').textContent='';
+  if($('#s-pass').value!==$('#s-pass2').value){$('#s-err').textContent='The two passwords don’t match.';return}
+  try{await api('/api/setup',{method:'POST',noRedirect:true,body:JSON.stringify({token:new URLSearchParams(location.search).get('token')||'',password:$('#s-pass').value})});location.href='/'}
+  catch(e){$('#s-err').textContent=e.message}});
+async function boot(){
+  if(location.pathname==='/setup'){const t=new URLSearchParams(location.search).get('token')||'';showAuth('setup');$('#auth-sub').textContent='Choose a password for your login.';
+    try{const r=await api('/api/setup/'+encodeURIComponent(t),{noRedirect:true});$('#s-user').value=r.username;$('#s-pass').focus()}
+    catch(e){$('#setup-form').innerHTML=`<div class="banner">${esc(e.message)}</div><a class="btn" href="/">Go to sign in</a>`}return}
+  let me=null;try{me=await api('/api/me',{noRedirect:true})}catch{}
+  if(!me){showAuth('login');$('#l-user').focus();return}
+  USER=me;CAN_ADMIN=me.role==='admin';document.body.classList.toggle('staff',!CAN_ADMIN);
+  $('#view-auth').hidden=true;$('#app-header').hidden=false;$('#tabs').hidden=false;$('#logout').hidden=false;
+  const mn=$('#me-name');mn.textContent=me.name||me.username;mn.hidden=CAN_ADMIN;
+  DB=makeApiDB();MODE='shared';
+  ['employees','projects','consultants','invoices','timers'].forEach(watchColl);
+  DB.doc('settings/main').onSnapshot(s=>{SETTINGS_LOADED=true;SETTINGS_EXISTS=!!s.exists;S.settings=(s.exists&&s.data())||{};schedule()},()=>{});
+  setTimeout(()=>{if(!S.projects){loadFail=true;schedule()}},10000);
+  if(CAN_ADMIN)loadUsers();
+  render()}
+boot();
+</script>
+</body>
+</html>
