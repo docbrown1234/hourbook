@@ -7,6 +7,10 @@ const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 
 const PROD = process.env.NODE_ENV === 'production';
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is not set. In Render, copy the database\'s Internal Database URL into this service\'s Environment as DATABASE_URL.');
+  process.exit(1);
+}
 const PORT = process.env.PORT || 10000;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
